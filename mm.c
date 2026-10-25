@@ -82,7 +82,7 @@ int get_list_index(size_t size) //拿到已知内存对应所在的那个链表�
 
   for(int i=1;i<13;i++)
   {
-    int gap=2^(((i+1)/2)+3);
+    int gap=1<<(((i+1)/2)+3);
     int end=start+gap;
     if(size>start&&size<=end)
     {
