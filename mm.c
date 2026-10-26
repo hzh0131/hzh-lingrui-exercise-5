@@ -455,7 +455,7 @@ void mm_free(void *ptr) // 释放内存并标记其为空闲块
 
 
 
-
+/*
 void *mm_realloc(void *ptr, size_t size) // 重新调整内存大小
 { 
   //第一种情况, ptr 为 NULL
@@ -517,4 +517,117 @@ void *mm_realloc(void *ptr, size_t size) // 重新调整内存大小
   
   return NULL; 
 
+}
+*/
+
+
+void *mm_realloc(void *ptr, size_t size) // 重新调整内存大小
+{ 
+  //第一种情况, ptr 为 NULL
+  if(ptr==NULL)
+  {
+    void*bp=mm_malloc(size);
+    
+    if(bp==NULL)
+    {
+      return NULL;
+    }
+
+    return bp;
+  }  
+  
+  
+  //第二种情况，ptr 不为 NULL 且 size 为0
+  if(ptr!=NULL&&size==0)
+  {
+    mm_free(ptr);
+    return NULL;
+  }
+
+  size_t current_size=GET_SIZE((char*)ptr-WSIZE);
+  size_t old_payload_size = current_size - DSIZE;
+  
+  size_t asize=ALIGN(size+DSIZE);
+  if(asize<4*WSIZE)
+  {
+    asize=4*WSIZE;
+  }
+  
+  //第三种情况，目前的内存块大小足以满足内存需求
+  if(current_size >= asize)
+  {
+  size_t left_size=current_size-asize;
+  
+  if(left_size>=4*WSIZE)
+  {
+    PUT((char*)ptr-WSIZE,PACK(asize,1));
+    PUT((char*)ptr-DSIZE+asize,PACK(asize,1));
+
+    void *rest=(char*)ptr+asize;
+    PUT((char*)rest-WSIZE,PACK(left_size,0));
+    PUT((char*)rest-DSIZE+left_size,PACK(left_size,0));
+  
+    coalesce(rest);
+  }
+  
+  //如果 left_size<32 的话就直接 return ptr   
+    return ptr;
+  }
+  
+  
+ // 第四种情况：尝试与物理相邻的后一个空闲块合并
+  void *next_bp = (char*)ptr+current_size;
+
+  if (!GET_ALLOC((char *)next_bp - WSIZE)) 
+  {
+    size_t next_size = GET_SIZE((char *)next_bp - WSIZE);
+    size_t combined_size = current_size + next_size;
+
+    if (combined_size >= asize) 
+    {
+        // 先从空闲链表中移除后一个空闲块
+        remove_free_block(next_bp);
+
+        size_t left_size = combined_size - asize;
+
+        if (left_size >= 4 * WSIZE) 
+        {
+            // 当前块使用 asize 大小
+            PUT((char *)ptr - WSIZE, PACK(asize, 1));
+            PUT((char *)ptr + asize - DSIZE, PACK(asize, 1));
+
+            // 剩余部分成为空闲块
+            void *rest = (char *)ptr + asize;
+            PUT((char *)rest - WSIZE, PACK(left_size, 0));
+            PUT((char *)rest + left_size - DSIZE, PACK(left_size, 0));
+
+            // 合并可能相邻的其他空闲块，并插入空闲链表
+            coalesce(rest);
+        } 
+        else 
+        {
+            // 剩余空间不足以形成最小空闲块，使用整个合并块
+            PUT((char *)ptr - WSIZE, PACK(combined_size, 1));
+            PUT((char *)ptr + combined_size - DSIZE,
+                PACK(combined_size, 1));
+        }
+
+        return ptr;  // 只有合并成功才返回原指针
+    }
+  }
+
+// 第五种情况：原地扩容失败，申请新块
+  void *new_bp = mm_malloc(size);
+
+  if (new_bp == NULL)
+      return NULL;
+
+  size_t copy_size = old_payload_size < size
+                 ? old_payload_size
+                 : size;
+
+  memcpy(new_bp, ptr, copy_size);
+  mm_free(ptr);
+
+  return new_bp;
 }
